@@ -1267,7 +1267,7 @@
     if (pointers.size === 1) {
       var dx = e.clientX - downX, dy = e.clientY - downY;
       if (Math.hypot(dx, dy) > 6) moved = true;
-      var k = unit();
+      var k = unit() * 1.5;
       tx = startTx + dx * k; ty = startTy + dy * k; apply();
     } else if (pointers.size === 2) {
       // zoom around the point between the fingers; moving both fingers pans
