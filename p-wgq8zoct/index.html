@@ -1229,18 +1229,37 @@
   function apply() { g.setAttribute('transform', 'translate(' + tx + ',' + ty + ') scale(' + s + ')'); }
   function pts() { var a = []; pointers.forEach(function (v) { a.push(v); }); return a; }
   function distOf() { var a = pts(); return Math.hypot(a[1].x - a[0].x, a[1].y - a[0].y); }
+  // map units per screen pixel, so the map moves exactly with the finger
+  function unit() {
+    var r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+    return Math.max(vb.width / r.width, vb.height / r.height) || 1;
+  }
+  // midpoint of two fingers, in map units
+  var anchor = { x: 0, y: 0 };
+  function mid() {
+    var a = pts(), r = svg.getBoundingClientRect(), k = unit();
+    return { x: ((a[0].x + a[1].x) / 2 - r.left) * k, y: ((a[0].y + a[1].y) / 2 - r.top) * k };
+  }
 
   svg.addEventListener('pointerdown', function (e) {
-    if (e.target && e.target.closest && e.target.closest('.lab-link')) return;
-    e.preventDefault();
+    var onLink = !!(e.target && e.target.closest && e.target.closest('.lab-link'));
+    if (!onLink) e.preventDefault();
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.size === 1) {
       startTx = tx; startTy = ty; downX = e.clientX; downY = e.clientY;
+      moved = false; downT = Date.now();
+      tapEl = e.target && e.target.closest ? e.target.closest('.marker') : null;
     } else if (pointers.size === 2) {
-      startS = s; pinchD = distOf();
+      startS = s; pinchD = distOf(); moved = true;
+      var m = mid(); anchor = { x: (m.x - tx) / s, y: (m.y - ty) / s };
     }
-    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    if (!onLink) { try { svg.setPointerCapture(e.pointerId); } catch (_) {} }
   });
+
+  // a drag that starts on a label pans the map and does not open the link
+  svg.addEventListener('click', function (e) {
+    if (moved) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 
   svg.addEventListener('pointermove', function (e) {
     if (!pointers.has(e.pointerId)) return;
@@ -1248,10 +1267,14 @@
     if (pointers.size === 1) {
       var dx = e.clientX - downX, dy = e.clientY - downY;
       if (Math.hypot(dx, dy) > 6) moved = true;
-      tx = startTx + dx; ty = startTy + dy; apply();
+      var k = unit();
+      tx = startTx + dx * k; ty = startTy + dy * k; apply();
     } else if (pointers.size === 2) {
+      // zoom around the point between the fingers; moving both fingers pans
       var nd = distOf();
       s = Math.max(0.5, Math.min(6, startS * nd / pinchD));
+      var c = mid();
+      tx = c.x - anchor.x * s; ty = c.y - anchor.y * s;
       apply();
     }
   });
